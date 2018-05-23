@@ -1,7 +1,7 @@
 ## Lab Name: AzureBatch.L200.UnusableNodes.2
-Introduction
+## Introduction
 This is a Level 200 lab for troubleshooting compute nodes in an “Unusable” state in Azure Batch. This lab should take ~45 minutes to complete.
-Deployment Instructions
+## Deployment Instructions
 1.	Deploy the template and download the source code.
 2.	Open up the application that was created in the deployment template to get the credentials required for the sample code to work correctly. Then, proceed to open the code sample in VS and make the following required changes:
 a.	Open “Program.cs” under DotNetTutorial application. 
@@ -15,7 +15,7 @@ vi.	You can name your PoolID and JobID however you desire.
 
  
 
-Resources Created
+## Resources Created
 This lab involves the following resources.
 -	Resource Group
 -	Batch Account 
@@ -23,15 +23,12 @@ This lab involves the following resources.
 -	Application – (which contains Batch and Storage credentials)
 -	Virtual Network
 -	Network Security Group
-Scenario
+## Scenario
 In this lab, after deploying the template you will see that the compute nodes deployed into the Batch pool are in a “unusable” state. You are tasked with resolving this issue
-Your Goal
+## Your Goal
 Your goal is to investigate the reason why the compute nodes are in a “unusable” state and then proceed to resolve the issue.
-Proof of Solution
+## Proof of Solution
 1.	Provide a screenshot confirming the error:
-
- 
-
 2.	Resolve the issue. Make the necessary changes to the relevant resource in order to get the nodes back to an “idle” state.
 3.	Take a screenshot of the nodes in “idle” state.
 
