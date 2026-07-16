@@ -5,47 +5,39 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "602250882325727556"
+      "templateHash": "13255704944143905160"
     }
   },
   "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "batlab02",
+      "metadata": {
+        "description": "Prefix for generated resource names."
+      }
+    },
     "location": {
       "type": "string",
       "defaultValue": "[resourceGroup().location]",
       "metadata": {
         "description": "Azure region for all resources."
       }
-    },
-    "namePrefix": {
-      "type": "string",
-      "defaultValue": "batlab02",
-      "minLength": 3,
-      "maxLength": 11,
-      "metadata": {
-        "description": "Short prefix used to derive resource names (lowercase letters/digits)."
-      }
-    },
-    "appPrincipalId": {
-      "type": "string",
-      "defaultValue": "[deployer().objectId]",
-      "metadata": {
-        "description": "Object ID of the principal that runs the sample app and needs blob data access. Defaults to the deploying user."
-      }
     }
   },
   "variables": {
     "suffix": "[uniqueString(resourceGroup().id)]",
-    "storageAccountName": "[toLower(format('{0}stg{1}', parameters('namePrefix'), substring(variables('suffix'), 0, 6)))]",
-    "batchAccountName": "[toLower(format('{0}ba{1}', parameters('namePrefix'), substring(variables('suffix'), 0, 6)))]",
-    "vnetName": "[format('{0}-vnet', parameters('namePrefix'))]",
-    "poolSubnetName": "pool-subnet",
-    "storageBlobDataContributor": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]"
+    "storageAccountName": "[toLower(format('{0}{1}', parameters('namePrefix'), variables('suffix')))]",
+    "batchAccountName": "[toLower(format('{0}ba{1}', parameters('namePrefix'), variables('suffix')))]",
+    "poolId": "batch_assessment_pool_Test",
+    "jobId": "batch_assessment_job_Test",
+    "contributorRole": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b24988ac-6180-42a0-ab88-20f7382dd24c')]",
+    "seedScript": "set -e\r\necho \"Authenticating with managed identity...\"\r\nfor a in 1 2 3 4 5 6; do\r\n  az login --identity -u \"$UAMI_CLIENT_ID\" -o none && break\r\n  echo \"  az login retry $a\"; sleep 15\r\ndone\r\necho \"Logging in to Batch account (shared key)...\"\r\nfor a in 1 2 3 4 5 6; do\r\n  az batch account login -g \"$RG\" -n \"$BATCH_NAME\" --shared-key-auth -o none && break\r\n  echo \"  batch login retry $a (waiting for role propagation)\"; sleep 20\r\ndone\r\necho \"Creating job $JOB_ID...\"\r\naz batch job create --id \"$JOB_ID\" --pool-id \"$POOL_ID\" -o none\r\necho \"Creating tasks...\"\r\nfor i in 1 2 3; do\r\n  az batch task create --job-id \"$JOB_ID\" --task-id \"assessment_test_task_$i\" --command-line \"cmd /c echo Analyzing taskdata$i.txt & ping -n 30 127.0.0.1 >nul\" -o none\r\n  echo \"  created assessment_test_task_$i\"\r\ndone\r\necho \"SEED_DONE\"\r\n"
   },
   "resources": [
     {
       "type": "Microsoft.Storage/storageAccounts",
       "apiVersion": "2023-05-01",
-      "name": "[variables('storageAccountName')]",
+      "name": "[if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName'))]",
       "location": "[parameters('location')]",
       "sku": {
         "name": "Standard_LRS"
@@ -53,44 +45,20 @@
       "kind": "StorageV2",
       "properties": {
         "minimumTlsVersion": "TLS1_2",
-        "allowSharedKeyAccess": true,
-        "allowBlobPublicAccess": false,
-        "supportsHttpsTrafficOnly": true
-      }
-    },
-    {
-      "type": "Microsoft.Network/virtualNetworks",
-      "apiVersion": "2023-11-01",
-      "name": "[variables('vnetName')]",
-      "location": "[parameters('location')]",
-      "properties": {
-        "addressSpace": {
-          "addressPrefixes": [
-            "10.20.0.0/16"
-          ]
-        },
-        "subnets": [
-          {
-            "name": "[variables('poolSubnetName')]",
-            "properties": {
-              "addressPrefix": "10.20.0.0/24",
-              "privateEndpointNetworkPolicies": "Disabled"
-            }
-          }
-        ]
+        "allowBlobPublicAccess": false
       }
     },
     {
       "type": "Microsoft.Batch/batchAccounts",
       "apiVersion": "2024-07-01",
-      "name": "[variables('batchAccountName')]",
+      "name": "[if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))]",
       "location": "[parameters('location')]",
       "properties": {
+        "autoStorage": {
+          "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName')))]"
+        },
         "poolAllocationMode": "BatchService",
         "publicNetworkAccess": "Enabled",
-        "autoStorage": {
-          "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
-        },
         "networkProfile": {
           "accountAccess": {
             "defaultAction": "Allow"
@@ -101,39 +69,143 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+        "[resourceId('Microsoft.Storage/storageAccounts', if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName')))]"
       ]
+    },
+    {
+      "type": "Microsoft.Batch/batchAccounts/pools",
+      "apiVersion": "2024-07-01",
+      "name": "[format('{0}/{1}', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName')), variables('poolId'))]",
+      "properties": {
+        "vmSize": "STANDARD_D1_V2",
+        "deploymentConfiguration": {
+          "virtualMachineConfiguration": {
+            "imageReference": {
+              "publisher": "MicrosoftWindowsServer",
+              "offer": "WindowsServer",
+              "sku": "2019-datacenter",
+              "version": "latest"
+            },
+            "nodeAgentSkuId": "batch.node.windows amd64"
+          }
+        },
+        "scaleSettings": {
+          "fixedScale": {
+            "targetDedicatedNodes": 1,
+            "resizeTimeout": "PT15M"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-seed-id', parameters('namePrefix'))]",
+      "location": "[parameters('location')]"
     },
     {
       "type": "Microsoft.Authorization/roleAssignments",
       "apiVersion": "2022-04-01",
-      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
-      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), parameters('appPrincipalId'), variables('storageBlobDataContributor'))]",
+      "scope": "[resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName')))]",
+      "name": "[guid(resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-seed-id', parameters('namePrefix'))), variables('contributorRole'))]",
       "properties": {
-        "roleDefinitionId": "[variables('storageBlobDataContributor')]",
-        "principalId": "[parameters('appPrincipalId')]"
+        "roleDefinitionId": "[variables('contributorRole')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-seed-id', parameters('namePrefix'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+        "[resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName')))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-seed-id', parameters('namePrefix')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.ContainerInstance/containerGroups",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}-seed', parameters('namePrefix'))]",
+      "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-seed-id', parameters('namePrefix'))))]": {}
+        }
+      },
+      "properties": {
+        "sku": "Standard",
+        "osType": "Linux",
+        "restartPolicy": "Never",
+        "containers": [
+          {
+            "name": "seed",
+            "properties": {
+              "image": "mcr.microsoft.com/azure-cli:2.61.0",
+              "resources": {
+                "requests": {
+                  "cpu": 1,
+                  "memoryInGB": "[json('1.5')]"
+                }
+              },
+              "environmentVariables": [
+                {
+                  "name": "UAMI_CLIENT_ID",
+                  "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-seed-id', parameters('namePrefix'))), '2023-01-31').clientId]"
+                },
+                {
+                  "name": "RG",
+                  "value": "[resourceGroup().name]"
+                },
+                {
+                  "name": "BATCH_NAME",
+                  "value": "[if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))]"
+                },
+                {
+                  "name": "POOL_ID",
+                  "value": "[variables('poolId')]"
+                },
+                {
+                  "name": "JOB_ID",
+                  "value": "[variables('jobId')]"
+                }
+              ],
+              "command": [
+                "/bin/bash",
+                "-c",
+                "[format('echo {0} | base64 -d | tr -d ''\\r'' | bash', base64(variables('seedScript')))]"
+              ]
+            }
+          }
+        ]
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName')))]",
+        "[extensionResourceId(resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-seed-id', parameters('namePrefix'))), variables('contributorRole')))]",
+        "[resourceId('Microsoft.Batch/batchAccounts/pools', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName')), variables('poolId'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-seed-id', parameters('namePrefix')))]"
       ]
     }
   ],
   "outputs": {
     "batchAccountName": {
       "type": "string",
-      "value": "[variables('batchAccountName')]"
+      "value": "[if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))]"
     },
     "batchAccountUrl": {
       "type": "string",
-      "value": "[format('https://{0}', reference(resourceId('Microsoft.Batch/batchAccounts', variables('batchAccountName')), '2024-07-01').accountEndpoint)]"
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Batch/batchAccounts', if(greater(length(variables('batchAccountName')), 24), substring(variables('batchAccountName'), 0, 24), variables('batchAccountName'))), '2024-07-01').accountEndpoint)]"
     },
     "storageAccountName": {
       "type": "string",
-      "value": "[variables('storageAccountName')]"
+      "value": "[if(greater(length(variables('storageAccountName')), 24), substring(variables('storageAccountName'), 0, 24), variables('storageAccountName'))]"
     },
-    "poolSubnetId": {
+    "poolId": {
       "type": "string",
-      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('poolSubnetName'))]"
+      "value": "[variables('poolId')]"
+    },
+    "jobId": {
+      "type": "string",
+      "value": "[variables('jobId')]"
     }
   }
 }
