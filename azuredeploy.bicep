@@ -11,11 +11,15 @@ param location string = resourceGroup().location
 @maxLength(11)
 param namePrefix string = 'batlab02'
 
+@description('Object ID of the principal that runs the sample app and needs blob data access. Defaults to the deploying user.')
+param appPrincipalId string = deployer().objectId
+
 var suffix = uniqueString(resourceGroup().id)
 var storageAccountName = toLower('${namePrefix}stg${substring(suffix, 0, 6)}')
 var batchAccountName = toLower('${namePrefix}ba${substring(suffix, 0, 6)}')
 var vnetName = '${namePrefix}-vnet'
 var poolSubnetName = 'pool-subnet'
+var storageBlobDataContributor = subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: storageAccountName
@@ -77,3 +81,12 @@ output batchAccountName string = batchAccount.name
 output batchAccountUrl string = 'https://${batchAccount.properties.accountEndpoint}'
 output storageAccountName string = storageAccount.name
 output poolSubnetId string = resourceId('Microsoft.Network/virtualNetworks/subnets', vnetName, poolSubnetName)
+
+resource blobDataRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(storageAccount.id, appPrincipalId, storageBlobDataContributor)
+  scope: storageAccount
+  properties: {
+    roleDefinitionId: storageBlobDataContributor
+    principalId: appPrincipalId
+  }
+}

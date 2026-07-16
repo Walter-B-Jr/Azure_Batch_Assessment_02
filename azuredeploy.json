@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "9708861317175465753"
+      "templateHash": "602250882325727556"
     }
   },
   "parameters": {
@@ -24,6 +24,13 @@
       "metadata": {
         "description": "Short prefix used to derive resource names (lowercase letters/digits)."
       }
+    },
+    "appPrincipalId": {
+      "type": "string",
+      "defaultValue": "[deployer().objectId]",
+      "metadata": {
+        "description": "Object ID of the principal that runs the sample app and needs blob data access. Defaults to the deploying user."
+      }
     }
   },
   "variables": {
@@ -31,7 +38,8 @@
     "storageAccountName": "[toLower(format('{0}stg{1}', parameters('namePrefix'), substring(variables('suffix'), 0, 6)))]",
     "batchAccountName": "[toLower(format('{0}ba{1}', parameters('namePrefix'), substring(variables('suffix'), 0, 6)))]",
     "vnetName": "[format('{0}-vnet', parameters('namePrefix'))]",
-    "poolSubnetName": "pool-subnet"
+    "poolSubnetName": "pool-subnet",
+    "storageBlobDataContributor": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')]"
   },
   "resources": [
     {
@@ -91,6 +99,19 @@
             "defaultAction": "Deny"
           }
         }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+      "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), parameters('appPrincipalId'), variables('storageBlobDataContributor'))]",
+      "properties": {
+        "roleDefinitionId": "[variables('storageBlobDataContributor')]",
+        "principalId": "[parameters('appPrincipalId')]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
