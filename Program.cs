@@ -24,16 +24,22 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
         // These are used when constructing connection strings for the Batch and Storage client objects.
 
         // Batch account credentials
-        private const string BatchAccountName = "waltsbatchtestvnet";
-        private const string BatchAccountKey = "8Y/932u5JMch/8mxGBU4MnmX0YoFdCbevNHREQlllSsmqCKerqHgQrfqqfO6FXJvD+lfsk0XK4hSJupYLzLTkQ==";
-        private const string BatchAccountUrl = "https://waltsbatchtestvnet.westus2.batch.azure.com";
+        private const string BatchAccountName = "";
+        private const string BatchAccountKey = "";
+        private const string BatchAccountUrl = "";
 
         // Storage account credentials
-        private const string StorageAccountName = "batchstoragetester";
-        private const string StorageAccountKey = "yyCjwGoM4KmeLa5XfN+PpPOnx/es8ZAlknyCwgGg7PfVmTyQyRYu7vtM3cCRNztag/IJ2WCn7gk/7VqMxbTm4A==";
+        private const string StorageAccountName = "";
+        private const string StorageAccountKey = "";
 
         private const string PoolId = "batch_assessment_pool_Test";
         private const string JobId = "batch_assessment_job_Test";
+
+        // Resource ID of the VNet subnet that the pool's compute nodes join. Populate this from the
+        // subnet created by the lab's deployment template. Leave empty to create a pool without a
+        // virtual network.
+        // Format: /subscriptions/{sub}/resourceGroups/{rg}/providers/Microsoft.Network/virtualNetworks/{vnet}/subnets/{subnet}
+        private const string PoolSubnetId = "";
 
         public static void Main(string[] args)
         {
@@ -292,15 +298,35 @@ namespace Microsoft.Azure.Batch.Samples.DotNetTutorial
             {
                 Console.WriteLine("Creating pool [{0}]...", poolId);
 
+                // CloudServiceConfiguration (classic Cloud Services / "osFamily") pools were retired by
+                // Azure Batch on 29 Feb 2024 and can no longer be created. Use VirtualMachineConfiguration.
+                ImageReference imageReference = new ImageReference(
+                    publisher: "MicrosoftWindowsServer",
+                    offer: "WindowsServer",
+                    sku: "2019-Datacenter",
+                    version: "latest");
+
                 // Create the unbound pool. Until we call CloudPool.Commit() or CommitAsync(), no pool is actually created in the
                 // Batch service. This CloudPool instance is therefore considered "unbound," and we can modify its properties.
                 pool = batchClient.PoolOperations.CreatePool(
                     poolId: poolId,
-                    targetLowPriorityComputeNodes: 1,                                             // 3 compute nodes
-                    virtualMachineSize: "small",                                                // single-core, 1.75 GB memory, 225 GB disk
-                    cloudServiceConfiguration: new CloudServiceConfiguration(osFamily: "5"));   // Windows Server 2012 R2
+                    targetLowPriorityComputeNodes: 1,                                           // 1 low-priority compute node
+                    virtualMachineSize: "Standard_D1_v2",                                       // single-core, 3.5 GB memory
+                    virtualMachineConfiguration: new VirtualMachineConfiguration(
+                        imageReference: imageReference,
+                        nodeAgentSkuId: "batch.node.windows amd64"));
                 
                 pool.MaxTasksPerComputeNode = 1;
+
+                // Join the compute nodes to the VNet subnet specified by PoolSubnetId, if provided.
+                if (!String.IsNullOrEmpty(PoolSubnetId))
+                {
+                    pool.NetworkConfiguration = new NetworkConfiguration
+                    {
+                        SubnetId = PoolSubnetId
+                    };
+                }
+
                 pool.ApplicationPackageReferences = new List<ApplicationPackageReference>
                 {
                     new ApplicationPackageReference {

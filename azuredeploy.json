@@ -1,0 +1,117 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.45.15.27210",
+      "templateHash": "16671547837251585451"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources."
+      }
+    },
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "batlab02",
+      "minLength": 3,
+      "maxLength": 11,
+      "metadata": {
+        "description": "Short prefix used to derive resource names (lowercase letters/digits)."
+      }
+    }
+  },
+  "variables": {
+    "suffix": "[uniqueString(resourceGroup().id)]",
+    "storageAccountName": "[toLower(format('{0}stg{1}', parameters('namePrefix'), substring(variables('suffix'), 0, 6)))]",
+    "batchAccountName": "[toLower(format('{0}ba{1}', parameters('namePrefix'), substring(variables('suffix'), 0, 6)))]",
+    "vnetName": "[format('{0}-vnet', parameters('namePrefix'))]",
+    "poolSubnetName": "pool-subnet"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_LRS"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": false,
+        "supportsHttpsTrafficOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2023-11-01",
+      "name": "[variables('vnetName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "10.20.0.0/16"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('poolSubnetName')]",
+            "properties": {
+              "addressPrefix": "10.20.0.0/24",
+              "privateEndpointNetworkPolicies": "Disabled"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Batch/batchAccounts",
+      "apiVersion": "2024-07-01",
+      "name": "[variables('batchAccountName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "poolAllocationMode": "BatchService",
+        "publicNetworkAccess": "Enabled",
+        "autoStorage": {
+          "storageAccountId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+        },
+        "networkProfile": {
+          "accountAccess": {
+            "defaultAction": "Allow"
+          },
+          "nodeManagementAccess": {
+            "defaultAction": "Deny"
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ]
+    }
+  ],
+  "outputs": {
+    "batchAccountName": {
+      "type": "string",
+      "value": "[variables('batchAccountName')]"
+    },
+    "batchAccountUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.Batch/batchAccounts', variables('batchAccountName')), '2024-07-01').accountEndpoint)]"
+    },
+    "storageAccountName": {
+      "type": "string",
+      "value": "[variables('storageAccountName')]"
+    },
+    "poolSubnetId": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('vnetName'), variables('poolSubnetName'))]"
+    }
+  }
+}
