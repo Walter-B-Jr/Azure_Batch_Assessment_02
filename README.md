@@ -34,9 +34,7 @@ This lab involves the following resources.
 -	Resource Group
 -	Batch Account 
 -	Storage Account 
--	Application � (which contains Batch and Storage credentials)
 -	Virtual Network
--	Network Security Group
 ## Scenario
 In this lab, after deploying the template you will see that the compute nodes deployed into the Batch pool are in a �unusable� state. You are tasked with resolving this issue
 ## Your Goal
